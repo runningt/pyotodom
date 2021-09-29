@@ -21,11 +21,15 @@ if __name__ == '__main__':
 
     log.info("Offers in that category - {0}".format(len(parsed_category)))
 
+    print("Offers in that category - {0}".format(len(parsed_category)))
     if SCRAPE_LIMIT:
         parsed_category = parsed_category[:int(SCRAPE_LIMIT)]
         log.info("Scarping limit - {0}".format(len(parsed_category)))
+
+        print("Scarping limit - {0}".format(len(parsed_category)))
 
     for offer in parsed_category:
         log.info("Scarping offer - {0}".format(offer['detail_url']))
         offer_detail = get_offer_information(offer['detail_url'], context=offer)
         log.info("Scraped offer - {0}".format(offer_detail))
+        print("Scraped offer - {0}".format(offer_detail))

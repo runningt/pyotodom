@@ -20,7 +20,7 @@ if (2, 7) <= sys.version_info < (3, 7):
     if os.getenv('DEBUG'):
         logging.basicConfig(level=logging.INFO)
 
-BASE_URL = 'http://www.otodom.pl'
+BASE_URL = 'https://www.otodom.pl'
 
 WHITELISTED_DOMAINS = [
     'otodom.pl',

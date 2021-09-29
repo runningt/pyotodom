@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#.!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 import json
@@ -6,8 +6,7 @@ import logging
 import re
 import sys
 import requests
-try:
-    from __builtin__ import unicode
+try:    from __builtin__ import unicode
 except ImportError:
     unicode = lambda x, *args: x
 
@@ -40,22 +39,28 @@ def get_region_from_autosuggest(region_part):
     url = u"https://www.otodom.pl/ajax/geo6/autosuggest/?data={0}".format(
         normalize_text(region_part, lower=False, replace_spaces=''))
     response = json.loads(get_response_for_url(url).text)[0]
+    print(response)
     region_type = response["level"]
     text = response["text"].replace("<strong>", "").replace("</strong>", "").split(", ")
 
     region_dict = {}
 
     if region_type == "CITY":
-        region_dict["city"] = u"{0}{1}{2}".format(normalize_text(text[0]), "_", response["city_id"])
+        region_dict["city"] = response["name"]
+        region_dict["id"] = response["id"].replace(".","/")
     elif region_type == "DISTRICT":
-        region_dict["city"] = u"{0}{1}{2}".format(normalize_text(text[1]), "_", response["city_id"])
+        region_dict["city"] = response["name"]
         region_dict["[district_id]"] = response["district_id"]
+        region_dict["id"] = response["id"].replace(".","/")
     elif region_type == "REGION":
         region_dict["voivodeship"] = normalize_text(text[0])
-    elif region_type == "STREET":
-        region_dict["city"] = u"{0}{1}{2}".format(normalize_text(text[0]), "_", response["city_id"])
-        region_dict["[street_id]"] = response["street_id"]
+        region_dict["id"] = response["id"].replace(".","/")
 
+    elif region_type == "STREET":
+        region_dict["city"] = normalize_text(text[0].split(",")[0])
+        region_dict["[street_id]"] = response["street_id"]
+        #TODO: concert id in format region.subregion.district.s.street into url
+        region_dict["id"] = response["id"].split(".s")[0].replace(".","/")
     return region_dict
 
 
@@ -91,29 +96,25 @@ def get_number_from_string(s, number_type, default):
         return default
 
 
-def get_url(main_category, detail_category, region, ads_per_page="", page=None, **filters):
+def get_url(main_category, detail_category, region, limit="24", page="1", **filters):
     """
     This method builds a ready-to-use url based on the input parameters.
 
     :param main_category: see :meth:`scrape.category.get_category` for reference
     :param detail_category: see :meth:`scrape.category.get_category` for reference
     :param region: see :meth:`scrape.category.get_category` for reference
-    :param ads_per_page: "?nrAdsPerPage=72" can be used to lower the amount of requests
+    :param limit: num of ads per page, 400 can be used to lower the amount of requests
     :param page: page number
     :param filters: see :meth:`scrape.category.get_category` for reference
     :rtype: string
     :return: the url
     """
-    page = "page={0}".format(page) if page is not None else ""
 
     # skip using autosuggest if any region data present in the filters
     if any([region_key in filters for region_key in REGION_DATA_KEYS]):
         region_data = get_region_from_filters(filters)
     else:
         region_data = get_region_from_autosuggest(region)
-
-    city_or_voivodeship = region_data["city"] if "city" in region_data else region_data[
-        "voivodeship"] if "voivodeship" in region_data else ""
 
     if "[district_id]" in region_data:
         filters["[district_id]"] = region_data["[district_id]"]
@@ -122,7 +123,7 @@ def get_url(main_category, detail_category, region, ads_per_page="", page=None, 
         filters["[street_id]"] = region_data["[street_id]"]
 
     # creating base url
-    url = "/".join([BASE_URL, main_category, detail_category, city_or_voivodeship])
+    url = "/".join([BASE_URL,'pl','oferty', main_category, detail_category, region_data["id"]])
 
     # adding building type if exists in filters
     if "building_type" in filters:
@@ -140,7 +141,8 @@ def get_url(main_category, detail_category, region, ads_per_page="", page=None, 
                 filter_list.append("search{}={}".format(quote(key), item))
         else:
             filter_list.append("search{}={}".format(quote(key), value))
-    url = url + "&".join([ads_per_page, page] + filter_list)
+
+    url = f"{url}?limit={limit}&page={page}" + "&".join(filter_list)
     log.info(url)
     return url
 

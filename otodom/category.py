@@ -28,37 +28,65 @@ def parse_category_offer(offer_markup):
     html_parser = BeautifulSoup(offer_markup, "html.parser")
     link = html_parser.find("a")
     url = link.attrs['href']
-    offer_id = html_parser.find('article').attrs.get('data-item-id')
     if not url:
         # detail url is not present
         return {}
-    if urlparse(url).hostname not in WHITELISTED_DOMAINS:
-        # domain is not supported by this backend
-        return {}
-    try:
-        poster = html_parser.find(class_="offer-item-details-bottom").find(class_="pull-right")
-    except AttributeError:
-        poster = ''
+    offer_id = url.split("-")[-1]
+    image = html_parser.find("img")
+    image = image.get("src","").split(";")[0] or image.text
+    title = html_parser.find("h3", {"data-cy":"listing-item-title"})
+    title = title.text.strip() if title else ""
+    poster = html_parser.find("span", class_="css-5zites es62z2j10") or html_parser.find("span", class_="css-acay6o es62z2j9")
+    poster = poster.text.strip() if poster else ""
+    price = html_parser.find("p", class_="css-lk61n3 es62z2j20")
+    price = price.text.strip().replace('\xa0', ' ') if price else ""
+
+    details = html_parser.findAll("span", class_="css-348r18 es62z2j21")
+    if len(details) > 2:
+        size = details[1].text.strip()
+        rooms = details[0].text.strip()
+        per_m2 = details[2].text.strip().replace('\xa0', ' ')
+    else:
+        size = ""
+        rooms = ""
+        per_m2 = ""
+
+
     return {
         'detail_url': url,
         'offer_id': offer_id,
-        'poster': poster.text.strip() if poster else "",
+        'poster': poster,
+        'image': image,
+        'price': price,
+        'size': size,
+        'rooms': rooms,
+        'price_per_m2' : per_m2
     }
 
 
-def parse_category_content(markup):
+def parse_category_content(markup, get_promoted=False):
     """
     A method for getting a list of all the offers found in the markup.
 
     :param markup: a requests.response.content object
-    :rtype: list(requests.response.content)
+    :get_promoted: True if promoted offers should be added to results
+    :rtype: list of parsed offers dicts
     """
     html_parser = BeautifulSoup(markup, "html.parser")
-    offers = html_parser.find_all(class_="offer-item")
+# TODO: get rid of promoted offers if required
+#    search_listings = html_parser.findAll("div", {"data-cy":"search-listing"})
+#    if len(search_listings) == 0:
+#        return []
+
+#    if not get_promoted:
+#        if len(search_listings) > 1 :
+#            search_listing = search_listings[1]
+#        else:
+#            search_listing = search_listings[0]
+#        html_parser = BeautifulSoup(search_listing, "html.parser")
+    offers = html_parser.findAll("a", {"data-cy":"listing-item-link"})
     parsed_offers = [
         parse_category_offer(str(offer)) for offer in offers
-        if offer.attrs.get("data-featured-name") != "promo_vip" and
-        offer.attrs.get("data-featured-name") != "promo_top_ads"
     ]
     return parsed_offers
 
@@ -71,8 +99,9 @@ def get_category_number_of_pages(markup):
     :rtype: int
     """
     html_parser = BeautifulSoup(markup, "html.parser")
-    offers = html_parser.find(class_="current")
-    return int(offers.text) if offers else 1
+    pages = html_parser.findAll("button", {"data-cy":"pagination.go-to-page"})
+    print(f"pages:{pages}")
+    return int(pages.text) if pages else 1
 
 
 def was_category_search_successful(markup):
@@ -83,7 +112,7 @@ def was_category_search_successful(markup):
 
 def get_category_number_of_pages_from_parameters(main_category, detail_category, region, **filters):
     """A method to establish the number of pages before actually scraping any data"""
-    url = get_url(main_category, detail_category, region, "?nrAdsPerPage=72", 1, **filters)
+    url = get_url(main_category, detail_category, region, "400", 1, **filters)
     content = get_response_for_url(url).content
     if not was_category_search_successful(content):
         log.warning("Search for category wasn't successful", url)
@@ -96,7 +125,7 @@ def get_category_number_of_pages_from_parameters(main_category, detail_category,
 def get_distinct_category_page(page, main_category, detail_category, region, **filters):
     """A method for scraping just the distinct page of a category"""
     parsed_content = []
-    url = get_url(main_category, detail_category, region, "?nrAdsPerPage=72", page, **filters)
+    url = get_url(main_category, detail_category, region, "72", page, **filters)
     content = get_response_for_url(url).content
 
     parsed_content.extend(parse_category_content(content))
@@ -104,7 +133,7 @@ def get_distinct_category_page(page, main_category, detail_category, region, **f
     return parsed_content
 
 
-def get_category(main_category, detail_category, region, **filters):
+def get_category(main_category, detail_category, region, limit="400", **filters):
     """
     Scrape OtoDom search results based on supplied parameters.
 
@@ -173,7 +202,7 @@ def get_category(main_category, detail_category, region, **filters):
     page, pages_count, parsed_content = 1, None, []
 
     while page == 1 or page <= pages_count:
-        url = get_url(main_category, detail_category, region, "?nrAdsPerPage=72", page, **filters)
+        url = get_url(main_category, detail_category, region, limit, page, **filters)
         content = get_response_for_url(url).content
         if not was_category_search_successful(content):
             log.warning("Search for category wasn't successful", url)
