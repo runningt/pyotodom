@@ -36,10 +36,8 @@ def get_region_from_autosuggest(region_part):
     """
     if not region_part:
         return {}
-    url = u"https://www.otodom.pl/ajax/geo6/autosuggest/?data={0}".format(
-        normalize_text(region_part, lower=False, replace_spaces=''))
+    url = f"{BASE_URL}/ajax/geo6/autosuggest/?data={normalize_text(region_part, lower=False, replace_spaces='')}"
     response = json.loads(get_response_for_url(url).text)[0]
-    print(response)
     region_type = response["level"]
     text = response["text"].replace("<strong>", "").replace("</strong>", "").split(", ")
 
@@ -73,6 +71,7 @@ def get_region_from_filters(filters):
     :rtype: dict
     :return: A dictionary which contents depend on the filters content.
     """
+    # TODO: Adjust to new format
     region_dict = {
         region_data: filters.get(region_data)
         for region_data in REGION_DATA_KEYS
@@ -146,6 +145,10 @@ def get_url(main_category, detail_category, region, limit="24", page="1", **filt
     log.info(url)
     return url
 
+
+
+def get_number_of_offers(main_category, detail_category, region, **filters):
+    pass
 
 @caching(key_func=key_sha1)
 def get_response_for_url(url):

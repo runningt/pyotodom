@@ -388,7 +388,9 @@ def get_offer_information(url, context=None):
 
     :returns: A dictionary containing the scraped offer details
     """
+    # TODO: Fix this one also
     # getting response
+    return {}
     response = get_response_for_url(url)
     content = response.content
     html_parser = BeautifulSoup(content, "html.parser")

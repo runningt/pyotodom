@@ -15,9 +15,11 @@ if __name__ == '__main__':
     input_dict = {}
 
     if os.getenv('PRICE_TO'):
-        input_dict['[filter_float_price:to]'] = os.getenv('PRICE_TO')
+        input_dict['priceMax'] = os.getenv('PRICE_TO')
 
-    parsed_category = get_category("wynajem", "mieszkanie", "gda", **input_dict)
+    input_dict['priceMax'] = 200000
+    #parsed_category = get_category("wynajem", "mieszkanie", "gda", **input_dict)
+    parsed_category = get_category("sprzedaz", "mieszkanie", "krk", limit="100", **input_dict)
 
     log.info("Offers in that category - {0}".format(len(parsed_category)))
 
