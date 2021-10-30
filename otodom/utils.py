@@ -133,15 +133,14 @@ def get_url(main_category, detail_category, region, limit="24", page="1", **filt
         url = url + "/q-" + "-".join(filters["description_fragment"].split())
 
     # preparing the rest of filters for addition to the url
-    filter_list = []
+    filter_list=[]
     for key, value in filters.items():
         if isinstance(value, list):
-            for item in value:
-                filter_list.append("search{}={}".format(quote(key), item))
+            filter_list.append(f"{key}=[{','.join(value)}]")
         else:
-            filter_list.append("search{}={}".format(quote(key), value))
+            filter_list.append("{}={}".format(quote(key), value))
 
-    url = f"{url}?limit={limit}&page={page}" + "&".join(filter_list)
+    url = f"{url}?limit={limit}&page={page}&" + "&".join(filter_list)
     log.info(url)
     return url
 

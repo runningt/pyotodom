@@ -17,7 +17,8 @@ if __name__ == '__main__':
     if os.getenv('PRICE_TO'):
         input_dict['priceMax'] = os.getenv('PRICE_TO')
 
-    input_dict['priceMax'] = 200000
+    input_dict['priceMin'] = 675000
+    input_dict['priceMax'] = 680000
     #parsed_category = get_category("wynajem", "mieszkanie", "gda", **input_dict)
     parsed_category = get_category("sprzedaz", "mieszkanie", "krk", limit="100", **input_dict)
 
@@ -32,6 +33,6 @@ if __name__ == '__main__':
 
     for offer in parsed_category:
         log.info("Scarping offer - {0}".format(offer['detail_url']))
-        offer_detail = get_offer_information(offer['detail_url'], context=offer)
-        log.info("Scraped offer - {0}".format(offer_detail))
-        print("Scraped offer - {0}".format(offer_detail))
+        #ffer_detail = get_offer_information(offer['detail_url'], context=offer)
+        #log.info("Scraped offer - {0}".format(offer_detail))
+        print("Scraped offer - {0}".format(offer))

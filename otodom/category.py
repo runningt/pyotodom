@@ -226,7 +226,7 @@ def get_category(main_category, detail_category, region, limit="400", **filters)
     offers = 0
     page = 1
 
-    while offers == 0 or offers < max_offers:
+    while offers == 0 or offers < max_offers and offers_parsed >= int(limit):
         url = get_url(main_category, detail_category, region, limit, page, **filters)
         content = get_response_for_url(url).content
         if not was_category_search_successful(content):
@@ -234,8 +234,9 @@ def get_category(main_category, detail_category, region, limit="400", **filters)
             return []
         if not max_offers:
             max_offers = max(12000, get_num_offers_from_markup(content))
-
-        parsed_content.extend(parse_category_content(content))
+        parsed_page = parse_category_content(content)
+        offers_parsed = len(parsed_page)
+        parsed_content.extend(parsed_page)
         offers = len(parsed_content)
         page+=1
     return parsed_content
