@@ -17,6 +17,14 @@ else:
 log = logging.getLogger(__file__)
 
 
+def _price_to_float(price: str) -> float:
+    try:
+        filtered = "".join(d for d in price if d.isdigit() and d.isalpha or d in [",", "."]).replace(",",".")
+        return float(filtered)
+    except ValueError:
+        return 0.0
+
+
 def parse_category_offer(offer_markup):
     """
     A method for getting the most important data out of an offer markup.
@@ -39,12 +47,7 @@ def parse_category_offer(offer_markup):
     title = article.find("h3", {"data-cy":"listing-item-title"})
     title = title.text.strip() if title else ""
     data = article.findAll("p")
-    price = data[1]
-    price = "".join(filter(str.isdigit, price.text)) if price else ""
-    try:
-        price = int(price)
-    except ValueError:
-        price = 0
+    price = _price_to_float(data[1].text)
     size = ""
     rooms = ""
     per_m2 = ""
@@ -54,11 +57,7 @@ def parse_category_offer(offer_markup):
         if len(details) > 2:
             rooms = "".join(filter(str.isdigit, details[0].text))
             size = details[1].text.strip()
-            per_m2 = "".join(d for d in details[2].text if d.isdigit() and d.isascii())
-            try:
-                per_m2 = int(per_m2)
-            except ValueError:
-                per_m2 = 0
+            per_m2 = _price_to_float(details[2].text)
     except IndexError:
         pass
 
@@ -96,8 +95,10 @@ def parse_category_content(markup, get_promoted=False):
             listing = search_listings[1]
         else:
             listing = html_parser
-    else:
+    elif len(search_listings) ==1:
         listing = search_listings[0]
+    else:
+        return []
 
     offers = listing.findAll("a", {"data-cy":"listing-item-link"})
     parsed_offers = [
