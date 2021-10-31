@@ -19,7 +19,7 @@ log = logging.getLogger(__file__)
 
 def _price_to_float(price: str) -> float:
     try:
-        filtered = "".join(d for d in price if d.isdigit() and d.isalpha or d in [",", "."]).replace(",",".")
+        filtered = "".join(d for d in price if d.isdigit() and d.isascii() or d in [",", "."]).replace(",",".")
         return float(filtered)
     except ValueError:
         return 0.0
@@ -73,9 +73,11 @@ def parse_category_offer(offer_markup):
         # 'poster': poster,
         'image': image,
         'price': price,
+        'price_int': round(price),
         'size': size,
         'rooms': rooms,
-        'price_per_m2' : per_m2
+        'price_per_m2' : per_m2,
+        'calculated_per_m2': price/size if size else 0.0
     }
 
 
