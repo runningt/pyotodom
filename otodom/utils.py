@@ -21,7 +21,7 @@ if sys.version_info < (3, 2):
 else:
     from urllib.parse import quote
 
-REGION_DATA_KEYS = ["city", "voivodeship", "[district_id]", "[street_id]"]
+REGION_DATA_KEYS = ["city", "voivodeship", "district_id", "street_id"]
 
 log = logging.getLogger(__file__)
 
@@ -50,15 +50,15 @@ def get_region_from_autosuggest(region_part):
         region_dict["id"] = response["id"].replace(".","/")
     elif region_type == "DISTRICT":
         region_dict["city"] = response["name"]
-        region_dict["[district_id]"] = response["district_id"]
+        region_dict["districtId"] = response["district_id"]
         region_dict["id"] = response["id"].replace(".","/")
     elif region_type == "REGION":
         region_dict["voivodeship"] = normalize_text(text[0])
+        region_dict["regionId"] = response["region_id"]
         region_dict["id"] = response["id"].replace(".","/")
-
     elif region_type == "STREET":
         region_dict["city"] = normalize_text(text[0].split(",")[0])
-        region_dict["[street_id]"] = response["street_id"]
+        region_dict["streetId"] = response["street_id"]
         #TODO: concert id in format region.subregion.district.s.street into url
         region_dict["id"] = response["id"].split(".s")[0].replace(".","/")
     return region_dict
@@ -120,11 +120,11 @@ def get_url(main_category, detail_category, region, limit="24", page="1", **filt
     else:
         region_data = get_region_from_autosuggest(region)
 
-    if "[district_id]" in region_data:
-        filters["[district_id]"] = region_data["[district_id]"]
+    if "districtId" in region_data:
+        filters["districtId"] = region_data["districtId"]
 
-    if "[street_id]" in region_data:
-        filters["[street_id]"] = region_data["[street_id]"]
+    if "streetId" in region_data:
+        filters["streetId"] = region_data["streetId"]
 
     # creating base url
     url = "/".join([BASE_URL,'pl','oferty', main_category, detail_category, region_data["id"]])
@@ -155,6 +155,7 @@ def get_num_offers_from_markup(markup):
     """
     Get total number of offers scrapping page
     """
+    # TODO: does not seem to work
     html_parser = BeautifulSoup(markup, "html.parser")
     num_offers = html_parser.find("strong", {"data-cy":"search.listing-panel.label.ads-number"})
     try:
@@ -162,83 +163,44 @@ def get_num_offers_from_markup(markup):
     except ValueError:
         return 0
 
+
+_main_category_translate = { "mieszkanie": "FLAT",
+  "dom": "HOUSE",
+ "pokoj":"ROOM",
+ "dzialka":"TERRAIN",
+"lokal": "COMMERCIALPROPERTY",
+"haleimagazyny": "HALL",
+"garaz":"GARAGE"}
+
+
 def get_number_of_offers(main_category, detail_category, region, **filters):
-    estate = "FLAT" if main_category == "mieszkanie" else ""
+    """
+    Get number of offers from otodom internal REST API (https://otodom.pl/api/query) POST request
+
+    """
     url = "/".join([BASE_URL, 'api', 'query'])
+
+    filter_attributes = {
+        "estate": _main_category_translate.get(main_category, "FLAT"),
+        "transaction": "RENT" if detail_category == "wynajem" else "SELL"}
+    filter_attributes.update(filters)
+
+    region_attrs = region.get("id", "").split("/")
+    geo_attributes = {
+        "regionId" : region_attrs[0] if len(region_attrs) > 0 else 0,
+        "subregionId": region_attrs[1] if len(region_attrs) > 1 else 0,
+        "cityId": region_attrs[2] if len(region_attrs) > 2 else 0,
+        "streetId": region.get("streetId", 0),
+        "districtId": region.get("districtId", 0),
+    }
+
     body = '''
     {
         "query": "query GetCountAds($filterAttributes: FilterAttributes, $filterLocations: FilterLocations) {\n  countAds(filterAttributes: $filterAttributes, filterLocations: $filterLocations) {\n    ... on CountAds {\n      count\n      __typename\n    }\n    __typename\n  }\n}\n",
         "operationName": "GetCountAds",
         "variables": {
-            "filterAttributes": {
-                "estate": "FLAT",
-                "transaction": "SELL",
-                "floors": [],
-                "buildingMaterial": [],
-                "buildingType": [],
-                "description": null,
-                "isForStudents": null,
-                "terrainAreaMin": null,
-                "terrainAreaMax": null,
-                "roofType": [],
-                "isRecreational": null,
-                "isBungalov": null,
-                "peoplePerRoom": [],
-                "media": [],
-                "vicinity": [],
-                "plotType": [],
-                "structure": [],
-                "heating": [],
-                "heightMin": null,
-                "heightMax": null,
-                "roomsNumber": [
-                    "FOUR", "FIVE", "SIX"
-                ],
-                "extras": [],
-                "useTypes": [],
-                "priceMin": null,
-                "priceMax": 1000000,
-                "pricePerMeterMin": null,
-                "pricePerMeterMax": null,
-                "areaMin": 81,
-                "areaMax": null,
-                "buildYearMin": null,
-                "buildYearMax": null,
-                "distanceRadius": null,
-                "freeFrom": null,
-                "floorsNumberMin": null,
-                "floorsNumberMax": null,
-                "daysSinceCreated": null,
-                "hasRemoteServices": null,
-                "hasMovie": null,
-                "hasWalkaround": null,
-                "hasOpenDay": null,
-                "hasPhotos": null,
-                "isPrivateOwner": null,
-                "market": "SECONDARY",
-                "ownerType": [],
-                "isExclusiveOffer": null,
-                "advertId": null,
-                "isPromoted": null,
-                "developerName": null,
-                "investmentName": null,
-                "investmentEstateType": null,
-                "investmentState": null
-            },
-            "filterLocations": {
-                "byGeoAttributes": [
-                    {
-                        "regionId": 6,
-                        "streetId": 0,
-                        "cityId": 38,
-                        "districtId": 0,
-                        "subregionId": 410
-                    }
-                ]
-            }
-        }
-    }
-    '''
+            "filterAttributes": ''' + str(filter_attributes) + '"filterLocations": { "byGeoAttributes": [' \
+           + str(geo_attributes) + "]}}}"
     return requests.post(url, data=body)
 
 @caching(key_func=key_sha1)

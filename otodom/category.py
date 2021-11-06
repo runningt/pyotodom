@@ -27,7 +27,7 @@ def parse_category_offer(offer_markup):
     """
     html_parser = BeautifulSoup(offer_markup, "html.parser")
     link = html_parser.find("a")
-    url = link.attrs['href']k
+    url = link.attrs['href']
     if not url:
         # detail url is not present
         return {}
@@ -163,7 +163,7 @@ def get_category(main_category, detail_category, region, limit="500", **filters)
             'priceMax': 0,  # maximal price
             'pricePerMeterMin': 0  # maximal price per square meter, only used for apartments for sale
             'pricePerMeterMax': 0  # minimal price per square meter, only used for apartments for sale
-            'market': [PRIMARY, SECONDARY]  # enum: PRIMARY, SECONDARY
+            'market': [PRIMARY, SECONDARY]  # enum: PRIMARY, SECONDARY, ALL
             'buildingMaterial': [BRICK, CONCRETE]  # enum: BRICK, WOOD, BREEZEBLOCK, HYDROTON, CONCRETE_PLATE, CONCRETE,
             SILIKAT, CELLULAR_CONCRETE, OTHER, REINFORCED_CONCRETE, only used for apartments for sale
             'areaMin': 0,  # minimal surface
@@ -207,7 +207,7 @@ def get_category(main_category, detail_category, region, limit="500", **filters)
         'poster' - a piece of information about the poster. Could either be a name of the agency or "Oferta prywatna"
     """
     parsed_content = []
-    max_offers = 0
+    max_offers = get_number_of_offers(main_category, detail_category, region, **filters)
     offers = 0
     page = 1
 
