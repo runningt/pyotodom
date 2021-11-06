@@ -12,6 +12,8 @@ except ImportError:
 
 from scrapper_helpers.utils import caching, normalize_text, key_sha1, get_random_user_agent
 
+from bs4 import BeautifulSoup
+
 from otodom import BASE_URL
 
 if sys.version_info < (3, 2):
@@ -94,6 +96,10 @@ def get_number_from_string(s, number_type, default):
     except ValueError:
         return default
 
+def price_to_float(price: str) -> float:
+    filtered = "".join(d for d in price if d.isdigit() and d.isascii() or d in [",", "."])
+    return _float(filtered, default=0.0)
+
 
 def get_url(main_category, detail_category, region, limit="24", page="1", **filters):
     """
@@ -106,8 +112,7 @@ def get_url(main_category, detail_category, region, limit="24", page="1", **filt
     :param page: page number
     :param filters: see :meth:`scrape.category.get_category` for reference
     :rtype: string
-    :return: the url
-    """
+    :return: the url    """
 
     # skip using autosuggest if any region data present in the filters
     if any([region_key in filters for region_key in REGION_DATA_KEYS]):
@@ -146,8 +151,95 @@ def get_url(main_category, detail_category, region, limit="24", page="1", **filt
 
 
 
+def get_num_offers_from_markup(markup):
+    """
+    Get total number of offers scrapping page
+    """
+    html_parser = BeautifulSoup(markup, "html.parser")
+    num_offers = html_parser.find("strong", {"data-cy":"search.listing-panel.label.ads-number"})
+    try:
+        return int(num_offers.findAll("span")[-1].text)
+    except ValueError:
+        return 0
+
 def get_number_of_offers(main_category, detail_category, region, **filters):
-    pass
+    estate = "FLAT" if main_category == "mieszkanie" else ""
+    url = "/".join([BASE_URL, 'api', 'query'])
+    body = '''
+    {
+        "query": "query GetCountAds($filterAttributes: FilterAttributes, $filterLocations: FilterLocations) {\n  countAds(filterAttributes: $filterAttributes, filterLocations: $filterLocations) {\n    ... on CountAds {\n      count\n      __typename\n    }\n    __typename\n  }\n}\n",
+        "operationName": "GetCountAds",
+        "variables": {
+            "filterAttributes": {
+                "estate": "FLAT",
+                "transaction": "SELL",
+                "floors": [],
+                "buildingMaterial": [],
+                "buildingType": [],
+                "description": null,
+                "isForStudents": null,
+                "terrainAreaMin": null,
+                "terrainAreaMax": null,
+                "roofType": [],
+                "isRecreational": null,
+                "isBungalov": null,
+                "peoplePerRoom": [],
+                "media": [],
+                "vicinity": [],
+                "plotType": [],
+                "structure": [],
+                "heating": [],
+                "heightMin": null,
+                "heightMax": null,
+                "roomsNumber": [
+                    "FOUR", "FIVE", "SIX"
+                ],
+                "extras": [],
+                "useTypes": [],
+                "priceMin": null,
+                "priceMax": 1000000,
+                "pricePerMeterMin": null,
+                "pricePerMeterMax": null,
+                "areaMin": 81,
+                "areaMax": null,
+                "buildYearMin": null,
+                "buildYearMax": null,
+                "distanceRadius": null,
+                "freeFrom": null,
+                "floorsNumberMin": null,
+                "floorsNumberMax": null,
+                "daysSinceCreated": null,
+                "hasRemoteServices": null,
+                "hasMovie": null,
+                "hasWalkaround": null,
+                "hasOpenDay": null,
+                "hasPhotos": null,
+                "isPrivateOwner": null,
+                "market": "SECONDARY",
+                "ownerType": [],
+                "isExclusiveOffer": null,
+                "advertId": null,
+                "isPromoted": null,
+                "developerName": null,
+                "investmentName": null,
+                "investmentEstateType": null,
+                "investmentState": null
+            },
+            "filterLocations": {
+                "byGeoAttributes": [
+                    {
+                        "regionId": 6,
+                        "streetId": 0,
+                        "cityId": 38,
+                        "districtId": 0,
+                        "subregionId": 410
+                    }
+                ]
+            }
+        }
+    }
+    '''
+    return requests.post(url, data=body)
 
 @caching(key_func=key_sha1)
 def get_response_for_url(url):

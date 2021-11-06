@@ -5,8 +5,8 @@ import logging
 import sys
 from bs4 import BeautifulSoup
 
-from otodom import WHITELISTED_DOMAINS, BASE_URL
-from otodom.utils import get_response_for_url, get_url
+from otodom import BASE_URL
+from otodom.utils import get_response_for_url, get_url, price_to_float, get_number_of_offers
 
 if sys.version_info < (3, 3):
     from urlparse import urlparse
@@ -15,14 +15,6 @@ else:
 
 
 log = logging.getLogger(__file__)
-
-
-def _price_to_float(price: str) -> float:
-    try:
-        filtered = "".join(d for d in price if d.isdigit() and d.isascii() or d in [",", "."]).replace(",",".")
-        return float(filtered)
-    except ValueError:
-        return 0.0
 
 
 def parse_category_offer(offer_markup):
@@ -35,7 +27,7 @@ def parse_category_offer(offer_markup):
     """
     html_parser = BeautifulSoup(offer_markup, "html.parser")
     link = html_parser.find("a")
-    url = link.attrs['href']
+    url = link.attrs['href']k
     if not url:
         # detail url is not present
         return {}
@@ -47,7 +39,7 @@ def parse_category_offer(offer_markup):
     title = article.find("h3", {"data-cy":"listing-item-title"})
     title = title.text.strip() if title else ""
     data = article.findAll("p")
-    price = _price_to_float(data[1].text)
+    price = price_to_float(data[1].text)
     size = ""
     rooms = ""
     per_m2 = ""
@@ -57,7 +49,7 @@ def parse_category_offer(offer_markup):
         if len(details) > 2:
             rooms = "".join(filter(str.isdigit, details[0].text))
             size = details[1].text.strip()
-            per_m2 = _price_to_float(details[2].text)
+            per_m2 = price_to_float(details[2].text)
     except IndexError:
         pass
 
@@ -113,6 +105,7 @@ def get_category_number_of_pages(markup):
     """
     A method that returns the maximal page number for a given markup, used for pagination handling.
 
+    TODO: Does not work any more
     :param markup: a requests.response.content object
     :rtype: int
     """
@@ -138,17 +131,6 @@ def was_category_search_successful(markup):
     has_warning = bool(html_parser.find(class_="search-location-extended-warning"))
     return not has_warning
 
-def get_num_offers_from_markup(markup):
-    """
-    Get total number of offers scrapping page
-    """
-    html_parser = BeautifulSoup(markup, "html.parser")
-    num_offers = html_parser.find("strong", {"data-cy":"search.listing-panel.label.ads-number"})
-    try:
-        return int(num_offers.findAll("span")[-1].text)
-    except ValueError:
-        return 0
-
 def get_distinct_category_page(page, main_category, detail_category, region, **filters):
     """A method for scraping just the distinct page of a category"""
     parsed_content = []
@@ -160,7 +142,7 @@ def get_distinct_category_page(page, main_category, detail_category, region, **f
     return parsed_content
 
 
-def get_category(main_category, detail_category, region, limit="400", **filters):
+def get_category(main_category, detail_category, region, limit="500", **filters):
     """
     Scrape OtoDom search results based on supplied parameters.
 
@@ -236,7 +218,7 @@ def get_category(main_category, detail_category, region, limit="400", **filters)
             log.warning("Search for category wasn't successful", url)
             return []
         if not max_offers:
-            max_offers = max(12000, get_num_offers_from_markup(content))
+            max_offers = max(12000, get_number_of_offers(main_category, detail_category, region, **filters))
         parsed_page = parse_category_content(content)
         offers_parsed = len(parsed_page)
         parsed_content.extend(parsed_page)
