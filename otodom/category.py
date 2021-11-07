@@ -52,7 +52,7 @@ def parse_category_offer(offer_markup):
         details = details.findAll("span")
         if len(details) > 2:
             rooms = "".join(filter(str.isdigit, details[0].text))
-            size = get_number_from_string(details[1].text.strip(), float, 0.0)
+            size = price_to_float(details[1].text)
             per_m2 = price_to_float(details[2].text)
     except IndexError:
         pass
@@ -136,7 +136,7 @@ def was_category_search_successful(markup):
     return not has_warning
 
 
-def get_category(main_category, detail_category, region, limit="500", **filters):
+def get_category(main_category, detail_category, region, offers_per_page="500", limit=0, **filters):
     """
     Scrape OtoDom search results based on supplied parameters.
 
@@ -146,6 +146,8 @@ def get_category(main_category, detail_category, region, limit="500", **filters)
     :param region: a string that contains the region name. Districts, cities and voivodeships are supported. The exact
                     location is established using OtoDom's API, just as it would happen when typing something into the
                     search bar. Empty string returns results for the whole country.
+    :param offers_per_page: str, number of offers per page (as string)
+    :param limit: int, if non-0 max number of offers
     :param filters: the following dict contains every possible filter with examples of its values, but can be empty:
 
     ::
@@ -203,12 +205,13 @@ def get_category(main_category, detail_category, region, limit="500", **filters)
     region_data = get_region_from_autosuggest(region)
     real_num_of_offers = get_number_of_offers(main_category, detail_category, region_data, **filters)
     max_offers = min(12000, real_num_of_offers)
+    limit= min(max_offers, limit) if limit else max_offers
     offers = 0
     page = 1
-    offers_parsed = int(limit)
+    offers_parsed = int(offers_per_page)
 
-    while offers == 0 or offers < max_offers and offers_parsed >= int(limit):
-        url = get_url(main_category, detail_category, region_data, limit, page, **filters)
+    while offers == 0 or offers < limit and offers_parsed >= int(offers_per_page):
+        url = get_url(main_category, detail_category, region_data, offers_per_page, page, **filters)
         content = get_response_for_url(url).content
         if not was_category_search_successful(content):
             log.warning("Search for category wasn't successful", url)
