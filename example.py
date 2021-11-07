@@ -1,8 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os
 import logging
+import os
 
 from otodom.category import get_category
 from otodom.offer import get_offer_information

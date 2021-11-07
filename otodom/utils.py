@@ -5,14 +5,15 @@ import json
 import logging
 import re
 import sys
+
 import requests
+
 try:    from __builtin__ import unicode
 except ImportError:
     unicode = lambda x, *args: x
 
-from scrapper_helpers.utils import caching, normalize_text, key_sha1, get_random_user_agent
-
 from bs4 import BeautifulSoup
+from scrapper_helpers.utils import caching, get_random_user_agent, key_sha1, normalize_text
 
 from otodom import BASE_URL
 

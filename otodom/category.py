@@ -3,10 +3,14 @@
 
 import logging
 import sys
+
 from bs4 import BeautifulSoup
 
 from otodom import BASE_URL
-from otodom.utils import get_response_for_url, get_url, get_region_from_autosuggest, price_to_float, get_number_of_offers, get_number_from_string
+from otodom.utils import (
+    get_number_from_string, get_number_of_offers, get_region_from_autosuggest, get_response_for_url, get_url,
+    price_to_float
+)
 
 if sys.version_info < (3, 3):
     from urlparse import urlparse
