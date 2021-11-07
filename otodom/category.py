@@ -6,7 +6,7 @@ import sys
 from bs4 import BeautifulSoup
 
 from otodom import BASE_URL
-from otodom.utils import get_response_for_url, get_url, price_to_float, get_number_of_offers
+from otodom.utils import get_response_for_url, get_url, get_region_from_autosuggest, price_to_float, get_number_of_offers, get_number_from_string
 
 if sys.version_info < (3, 3):
     from urlparse import urlparse
@@ -48,7 +48,7 @@ def parse_category_offer(offer_markup):
         details = details.findAll("span")
         if len(details) > 2:
             rooms = "".join(filter(str.isdigit, details[0].text))
-            size = details[1].text.strip()
+            size = get_number_from_string(details[1].text.strip(), float, 0.0)
             per_m2 = price_to_float(details[2].text)
     except IndexError:
         pass
@@ -131,16 +131,6 @@ def was_category_search_successful(markup):
     has_warning = bool(html_parser.find(class_="search-location-extended-warning"))
     return not has_warning
 
-def get_distinct_category_page(page, main_category, detail_category, region, **filters):
-    """A method for scraping just the distinct page of a category"""
-    parsed_content = []
-    url = get_url(main_category, detail_category, region, "72", page, **filters)
-    content = get_response_for_url(url).content
-
-    parsed_content.extend(parse_category_content(content))
-
-    return parsed_content
-
 
 def get_category(main_category, detail_category, region, limit="500", **filters):
     """
@@ -151,8 +141,7 @@ def get_category(main_category, detail_category, region, limit="500", **filters)
                             empty string for any
     :param region: a string that contains the region name. Districts, cities and voivodeships are supported. The exact
                     location is established using OtoDom's API, just as it would happen when typing something into the
-                    search bar. Empty string returns results for the whole country. Will be ignored if either 'city',
-                    'region', '[district_id]' or '[street_id]' is present in the filters.
+                    search bar. Empty string returns results for the whole country.
     :param filters: the following dict contains every possible filter with examples of its values, but can be empty:
 
     ::
@@ -207,22 +196,23 @@ def get_category(main_category, detail_category, region, limit="500", **filters)
         'poster' - a piece of information about the poster. Could either be a name of the agency or "Oferta prywatna"
     """
     parsed_content = []
-    max_offers = get_number_of_offers(main_category, detail_category, region, **filters)
+    region_data = get_region_from_autosuggest(region)
+    real_num_of_offers = get_number_of_offers(main_category, detail_category, region_data, **filters)
+    max_offers = min(12000, real_num_of_offers)
     offers = 0
     page = 1
+    offers_parsed = int(limit)
 
     while offers == 0 or offers < max_offers and offers_parsed >= int(limit):
-        url = get_url(main_category, detail_category, region, limit, page, **filters)
+        url = get_url(main_category, detail_category, region_data, limit, page, **filters)
         content = get_response_for_url(url).content
         if not was_category_search_successful(content):
             log.warning("Search for category wasn't successful", url)
             return []
-        if not max_offers:
-            max_offers = max(12000, get_number_of_offers(main_category, detail_category, region, **filters))
         parsed_page = parse_category_content(content)
         offers_parsed = len(parsed_page)
         parsed_content.extend(parsed_page)
-        offers = len(parsed_content)
+        offers+= offers_parsed
         page+=1
     return parsed_content
 

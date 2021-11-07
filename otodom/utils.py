@@ -101,24 +101,19 @@ def price_to_float(price: str) -> float:
     return _float(filtered, default=0.0)
 
 
-def get_url(main_category, detail_category, region, limit="24", page="1", **filters):
+def get_url(main_category, detail_category, region_data, limit="24", page="1", **filters):
     """
     This method builds a ready-to-use url based on the input parameters.
 
     :param main_category: see :meth:`scrape.category.get_category` for reference
     :param detail_category: see :meth:`scrape.category.get_category` for reference
-    :param region: see :meth:`scrape.category.get_category` for reference
+    :param region_data: see :meth:`scrape.utils.get_region_from_autosuggest` for reference
     :param limit: num of ads per page, 400 can be used to lower the amount of requests
     :param page: page number
     :param filters: see :meth:`scrape.category.get_category` for reference
     :rtype: string
     :return: the url    """
 
-    # skip using autosuggest if any region data present in the filters
-    if any([region_key in filters for region_key in REGION_DATA_KEYS]):
-        region_data = get_region_from_filters(filters)
-    else:
-        region_data = get_region_from_autosuggest(region)
 
     if "districtId" in region_data:
         filters["districtId"] = region_data["districtId"]
@@ -173,9 +168,16 @@ _main_category_translate = { "mieszkanie": "FLAT",
 "garaz":"GARAGE"}
 
 
-def get_number_of_offers(main_category, detail_category, region, **filters):
+def get_number_of_offers(main_category, detail_category, region_data, **filters):
     """
     Get number of offers from otodom internal REST API (https://otodom.pl/api/query) POST request
+
+    :param main_category: see :meth:`scrape.category.get_category` for reference
+    :param detail_category: see :meth:`scrape.category.get_category` for reference
+    :param region_data: see :meth:`scrape.utils.get_region_from_autosuggest` for reference
+    :param filters: see :meth:`scrape.category.get_category` for reference
+    :rtype: int
+    :return: number of offers, or -1 if failed
 
     """
     url = "/".join([BASE_URL, 'api', 'query'])
@@ -185,23 +187,34 @@ def get_number_of_offers(main_category, detail_category, region, **filters):
         "transaction": "RENT" if detail_category == "wynajem" else "SELL"}
     filter_attributes.update(filters)
 
-    region_attrs = region.get("id", "").split("/")
+    region_attrs = region_data.get("id", "").split("/")
     geo_attributes = {
         "regionId" : region_attrs[0] if len(region_attrs) > 0 else 0,
         "subregionId": region_attrs[1] if len(region_attrs) > 1 else 0,
         "cityId": region_attrs[2] if len(region_attrs) > 2 else 0,
-        "streetId": region.get("streetId", 0),
-        "districtId": region.get("districtId", 0),
+        "streetId": region_data.get("streetId", 0),
+        "districtId": region_data.get("districtId", 0),
     }
 
-    body = '''
-    {
+    body = {
         "query": "query GetCountAds($filterAttributes: FilterAttributes, $filterLocations: FilterLocations) {\n  countAds(filterAttributes: $filterAttributes, filterLocations: $filterLocations) {\n    ... on CountAds {\n      count\n      __typename\n    }\n    __typename\n  }\n}\n",
         "operationName": "GetCountAds",
         "variables": {
-            "filterAttributes": ''' + str(filter_attributes) + '"filterLocations": { "byGeoAttributes": [' \
-           + str(geo_attributes) + "]}}}"
-    return requests.post(url, data=body)
+            "filterAttributes": filter_attributes,
+            "filterLocations": {"byGeoAttributes": [geo_attributes]}
+        }
+    }
+    result = requests.post(url, json=body)
+    try:
+        if result.status_code == 200:
+            data = result.json().get("data",{})
+            return data.get("countAds",{}).get("count",0)
+        else:
+            return -1
+    except ValueError:
+        return -1
+    
+
 
 @caching(key_func=key_sha1)
 def get_response_for_url(url):

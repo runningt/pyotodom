@@ -22,7 +22,7 @@ if __name__ == '__main__':
     #parsed_category = get_category("wynajem", "mieszkanie", "gda", **input_dict)
 
     filters = {"areaMin": 40, 'areaMax': 60}
-    parsed_category = get_category("sprzedaz", "mieszkanie", "krk", limit="400", **input_dict)
+    parsed_category = get_category("sprzedaz", "mieszkanie", "krk", limit="500", **filters)
 
     log.info("Offers in that category - {0}".format(len(parsed_category)))
 
