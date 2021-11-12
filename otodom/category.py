@@ -38,7 +38,7 @@ def parse_category_offer(offer_markup):
     offer_id = url.split("-")[-1]
     url = BASE_URL + url
     image = html_parser.find("img")
-    image = image.get("src", "").split(";")[0] or image.text
+    image = image.get("src", "").split(";")[0] or image.text if image else ''
     article = html_parser.find("article")
     title = article.find("h3", {"data-cy": "listing-item-title"})
     title = title.text.strip() if title else ""
