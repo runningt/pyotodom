@@ -31,16 +31,16 @@ def parse_category_offer(offer_markup):
     """
     html_parser = BeautifulSoup(offer_markup, "html.parser")
     link = html_parser.find("a")
-    url = link.attrs['href']
+    url = link.attrs["href"]
     if not url:
         # detail url is not present
         return {}
     offer_id = url.split("-")[-1]
     url = BASE_URL + url
     image = html_parser.find("img")
-    image = image.get("src","").split(";")[0] or image.text
+    image = image.get("src", "").split(";")[0] or image.text
     article = html_parser.find("article")
-    title = article.find("h3", {"data-cy":"listing-item-title"})
+    title = article.find("h3", {"data-cy": "listing-item-title"})
     title = title.text.strip() if title else ""
     data = article.findAll("p")
     price = price_to_float(data[1].text)
@@ -64,16 +64,16 @@ def parse_category_offer(offer_markup):
     # else:
     #   poster = ""
     return {
-        'detail_url': url,
-        'offer_id': offer_id,
+        "detail_url": url,
+        "offer_id": offer_id,
         # 'poster': poster,
-        'image': image,
-        'price': price,
-        'price_int': round(price),
-        'size': size,
-        'rooms': rooms,
-        'price_per_m2' : per_m2,
-        'calculated_per_m2': price/size if size else 0.0
+        "image": image,
+        "price": price,
+        "price_int": round(price),
+        "size": size,
+        "rooms": rooms,
+        "price_per_m2": per_m2,
+        "calculated_per_m2": price / size if size else 0.0,
     }
 
 
@@ -87,56 +87,35 @@ def parse_category_content(markup, get_promoted=False):
     """
     html_parser = BeautifulSoup(markup, "html.parser")
 
-    search_listings = html_parser.findAll("div", {"data-cy":"search.listing"})
+    search_listings = html_parser.findAll("div", {"data-cy": "search.listing"})
     if len(search_listings) > 1:
         if not get_promoted:
             listing = search_listings[1]
         else:
             listing = html_parser
-    elif len(search_listings) ==1:
+    elif len(search_listings) == 1:
         listing = search_listings[0]
     else:
         return []
 
-    offers = listing.findAll("a", {"data-cy":"listing-item-link"})
-    parsed_offers = [
-        parse_category_offer(str(offer)) for offer in offers
-    ]
+    offers = listing.findAll("a", {"data-cy": "listing-item-link"})
+    parsed_offers = [parse_category_offer(str(offer)) for offer in offers]
     return parsed_offers
 
 
-def get_category_number_of_pages(markup):
-    """
-    A method that returns the maximal page number for a given markup, used for pagination handling.
-
-    TODO: Does not work any more
-    :param markup: a requests.response.content object
-    :rtype: int
-    """
-    html_parser = BeautifulSoup(markup, "html.parser")
-    navigation = html_parser.find("div", attrs={"role":"navigation"})
-    buttons = html_parser.findAll("button", recursive=True)
-    if not navigation:
-        return 1
-    #pages = navigation.findAll("button", recursive=True)
-    res = [1]
-    for page in buttons:
-        try:
-            num = int(page.text)
-            res.append(num)
-        except:
-            pass
-    return max(res)
-
-
-
 def was_category_search_successful(markup):
+    """
+    :rtype: bool
+    :return: True if search was successful, False if no results found
+    """
     html_parser = BeautifulSoup(markup, "html.parser")
-    has_warning = bool(html_parser.find(class_="search-location-extended-warning"))
+    has_warning = bool(html_parser.find("div", {"data-cy": "no-search-results"}))
     return not has_warning
 
 
-def get_category(main_category, detail_category, region, offers_per_page="500", limit=0, **filters):
+def get_category(
+    main_category, detail_category, region, offers_per_page="500", limit=0, **filters
+):
     """
     Scrape OtoDom search results based on supplied parameters.
 
@@ -158,8 +137,8 @@ def get_category(main_category, detail_category, region, offers_per_page="500", 
             'priceMax': 0,  # maximal price
             'pricePerMeterMin': 0  # maximal price per square meter, only used for apartments for sale
             'pricePerMeterMax': 0  # minimal price per square meter, only used for apartments for sale
-            'market': [PRIMARY, SECONDARY]  # enum: PRIMARY, SECONDARY, ALL
-            'buildingMaterial': [BRICK, CONCRETE]  # enum: BRICK, WOOD, BREEZEBLOCK, HYDROTON, CONCRETE_PLATE, CONCRETE,
+            'market':  'PRIMARY' # enum (str): PRIMARY, SECONDARY, ALL
+            'buildingMaterial': ['BRICK']  # BRICK, WOOD, BREEZEBLOCK, HYDROTON, CONCRETE_PLATE, CONCRETE,
             SILIKAT, CELLULAR_CONCRETE, OTHER, REINFORCED_CONCRETE, only used for apartments for sale
             'areaMin': 0,  # minimal surface
             'areaMax: 0,  # maximal surface
@@ -169,15 +148,15 @@ def get_category(main_category, detail_category, region, offers_per_page="500", 
             'isExclusiveOffer': 0,  # whether or not the offer is otodom exclusive
             #'[filter_enum_rent_to_students][]': 0,  # whether or not the offer is aimed for students, only used for
                 apartments for rent
-            'floors': 'CELLAR',  # enum: CELLAR, ground_floor, floor_1-floor_10, floor_higher_10,
+            'floors': ['CELLAR'],  #  : CELLAR, CELLAR,GROUND,FIRST,SECOND,THIRD to TENTH, ABOVE_TENTH, GARRET
                 garret
             'floorsNumberMin': 1,  # minimal number of floors in the building
             'floorsNumberMax': 1,  # maximal number of floors in the building
-            'buildingType': enum BLOCK,TENEMENT,HOUSE,INFILL,RIBBON,APARTMENT,LOFT
+            'buildingType': 'BLOCK' # enum (str) BLOCK,TENEMENT,HOUSE,INFILL,RIBBON,APARTMENT,LOFT
             #'[filter_enum_heating][]': 'urban',  # enum: urban, gas, tiled_stove, electrical, boiler_room, other
             'buildYearMin': 1980,  # minimal year the building was built in
             'buildYearMax': 2016,  # maximal year the building was built in
-            'extras': ['BALCONY', 'BASEMENT'],  # enum: AIR_CONDITIONING, BALCONY, BASEMENT, GARAGE, GARDEN, LIFT, NON_SMOKERS_ONLY, SEPARATE_KITCHEN, TERRACE, TWO_STOREY, USABLE_ROOM]
+            'extras': ['BALCONY', 'BASEMENT'], # AIR_CONDITIONING, BALCONY, BASEMENT, GARAGE, GARDEN, LIFT, NON_SMOKERS_ONLY, SEPARATE_KITCHEN, TERRACE, TWO_STOREY, USABLE_ROOM]
             #'[filter_enum_media_types][]': ['internet', 'phone'],  # enum: internet, cable-television, phone
             #'[free_from]': 'from_now',  # when will it be possible to move in, enum: from_now, 30, 90
             'daysSinceCreated': 3,  # when was the offer posted on otodom in days, enum: 1, 3, 7, 14
@@ -203,15 +182,24 @@ def get_category(main_category, detail_category, region, offers_per_page="500", 
     """
     parsed_content = []
     region_data = get_region_from_autosuggest(region)
-    real_num_of_offers = get_number_of_offers(main_category, detail_category, region_data, **filters)
+    real_num_of_offers = get_number_of_offers(
+        main_category, detail_category, region_data, **filters
+    )
     max_offers = min(12000, real_num_of_offers)
-    limit= min(max_offers, limit) if limit else max_offers
+    limit = min(max_offers, limit) if limit else max_offers
     offers = 0
     page = 1
     offers_parsed = int(offers_per_page)
 
     while offers == 0 or offers < limit and offers_parsed >= int(offers_per_page):
-        url = get_url(main_category, detail_category, region_data, offers_per_page, page, **filters)
+        url = get_url(
+            main_category,
+            detail_category,
+            region_data,
+            offers_per_page,
+            page,
+            **filters
+        )
         content = get_response_for_url(url).content
         if not was_category_search_successful(content):
             log.warning("Search for category wasn't successful", url)
@@ -219,7 +207,6 @@ def get_category(main_category, detail_category, region, offers_per_page="500", 
         parsed_page = parse_category_content(content)
         offers_parsed = len(parsed_page)
         parsed_content.extend(parsed_page)
-        offers+= offers_parsed
-        page+=1
+        offers += offers_parsed
+        page += 1
     return parsed_content
-
