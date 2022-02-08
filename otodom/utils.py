@@ -14,7 +14,12 @@ except ImportError:
     unicode = lambda x, *args: x
 
 from bs4 import BeautifulSoup
-from scrapper_helpers.utils import caching, get_random_user_agent, key_sha1, normalize_text
+from scrapper_helpers.utils import (
+    caching,
+    get_random_user_agent,
+    key_sha1,
+    normalize_text,
+)
 
 from otodom import BASE_URL
 
@@ -28,6 +33,7 @@ REGION_DATA_KEYS = ["city", "voivodeship", "district_id", "street_id"]
 log = logging.getLogger(__file__)
 
 
+@caching(key_func=key_sha1)
 def get_region_from_autosuggest(region_part):
     """
     This method makes a request to the OtoDom api, asking for the best fitting region for the supplied
@@ -153,17 +159,31 @@ def get_url(
     return url
 
 
-def get_json_url(main_category, detail_category, region_data, filters):
-
-    # get identifier from buildMaifest
+@caching(key_func=key_sha1)
+def _get_json_identifier(main_category, detail_category, region_data, **filters):
+    """
+    get identifier from buildMaifest
+    """
     short_url = get_url(main_category, detail_category, region_data, 1, 1, **filters)
-    content = get_response_for_url(short_url).content
+    content = BeautifulSoup(get_response_for_url(short_url).content, "html.parser")
     try:
         script = content.find("script", {"src": re.compile(r"buildManifest\.js")})
-        identifier = script.src.split("/")[-2]
+        return script.attrs["src"].split("/")[-2]
     except (IndexError, TypeError):
         return None
 
+
+def get_json_url(
+    main_category, detail_category, region_data, limit="24", page="1", **filters
+):
+    """
+    Get url of json file with otodom search data
+    """
+    identifier = _get_json_identifier(
+        main_category, detail_category, region_data, **filters
+    )
+    if not identifier:
+        return None
     url = "/".join(
         [
             BASE_URL,
@@ -222,6 +242,19 @@ _main_category_translate = {
     "lokal": "COMMERCIALPROPERTY",
     "haleimagazyny": "HALL",
     "garaz": "GARAGE",
+}
+
+_rooms_translate = {
+    "ONE": 1,
+    "TWO": 2,
+    "THREE": 3,
+    "FOUR": 4,
+    "FIVE": 5,
+    "SIX": 6,
+    "SEVEN": 7,
+    "EIGHT": 8,
+    "NINE": 9,
+    "TEN": 10,
 }
 
 

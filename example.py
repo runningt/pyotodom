@@ -4,7 +4,7 @@
 import logging
 import os
 
-from otodom.category import get_category
+from otodom.category import get_category_json
 from otodom.offer import get_offer_information
 
 log = logging.getLogger(__file__)
@@ -27,7 +27,7 @@ if __name__ == "__main__":
         "market": "SECONDARY",
         "roomsNumber": ["TWO", "THREE", "FOUR"],
     }
-    parsed_category = get_category(
+    parsed_category = get_category_json(
         "sprzedaz", "mieszkanie", "krk", offers_per_page="10", limit=10, **filters
     )
 

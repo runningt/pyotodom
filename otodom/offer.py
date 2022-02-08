@@ -8,11 +8,134 @@ import re
 
 import requests
 from bs4 import BeautifulSoup
-from scrapper_helpers.utils import caching, key_sha1, replace_all, _int, _float, get_random_user_agent
+from scrapper_helpers.utils import (
+    _float,
+    _int,
+    caching,
+    get_random_user_agent,
+    key_sha1,
+    replace_all,
+)
 
-from otodom.utils import get_cookie_from, get_csrf_token, get_response_for_url
+from otodom import BASE_URL
+from otodom.utils import (
+    _rooms_translate,
+    get_cookie_from,
+    get_csrf_token,
+    get_response_for_url,
+    price_to_float,
+)
 
 log = logging.getLogger(__file__)
+
+
+def parse_json_offer(offer):
+
+    slug_id = offer.get("slug", "")
+    detail_url = "/".join([BASE_URL, "pl", "oferta", slug_id])
+    offer_id = slug_id.split("-")[-1]
+    try:
+        image_url = offer["images"][0]["large"]
+    except (IndexError, AttributeError):
+        image_url = ""
+
+    try:
+        # TODO: calculate to PLN if different currency
+        if offer["totalPrice"]["currency"] != "PLN":
+            price = -1
+        else:
+            price = offer["totalPrice"]["value"]
+    except (IndexError, AttributeError):
+        price = -1
+
+    try:
+        # TODO: calculate to PLN if different currency
+        if offer["pricePerSquareMeter"]["currency"] != "PLN":
+            price_per_m2 = -1
+        else:
+            price_per_m2 = offer["pricePerSquareMeter"]["value"]
+    except (IndexError, AttributeError):
+        price_per_m2 = -1
+
+    try:
+        rooms = _rooms_translate.get(offer["roomsNumber"], 0)
+    except (IndexError, AttributeError):
+        rooms = 0
+    size = offer.get("areaInSquareMeters", 0)
+
+    return {
+        "detail_url": detail_url,
+        "offer_id": offer_id,
+        "int_id": offer["id"],
+        # 'poster': poster,
+        image_url: image_url,
+        "price": price,
+        "price_int": round(price),
+        "size": size,
+        "rooms": rooms,
+        "rooms_label": offer.get("roomsNumber", ""),
+        "price_per_m2": price_per_m2,
+        "calculated_per_m2": price / size if size else -1,
+        "offer_info": offer,
+    }
+
+    return json_offer
+
+
+def parse_category_offer(offer_markup):
+    """
+    A method for getting the most important data out of an offer markup.
+
+    :param offer_markup: a requests.response.content object
+    :rtype: dict(string, string)
+    :return: see the return section of :meth:`scrape.category.get_category` for more information
+    """
+    html_parser = BeautifulSoup(offer_markup, "html.parser")
+    link = html_parser.find("a")
+    url = link.attrs["href"]
+    if not url:
+        # detail url is not present
+        return {}
+    offer_id = url.split("-")[-1]
+    url = BASE_URL + url
+    image = html_parser.find("img")
+    image = image.get("src", "").split(";")[0] or image.text if image else ""
+    article = html_parser.find("article")
+    title = article.find("h3", {"data-cy": "listing-item-title"})
+    title = title.text.strip() if title else ""
+    data = article.findAll("p")
+    price = price_to_float(data[1].text)
+    size = ""
+    rooms = ""
+    per_m2 = ""
+    try:
+        details = data[2]
+        details = details.findAll("span")
+        if len(details) > 2:
+            rooms = "".join(filter(str.isdigit, details[0].text))
+            size = price_to_float(details[1].text)
+            per_m2 = price_to_float(details[2].text)
+    except IndexError:
+        pass
+
+    # TODO: add poster
+    # posters = article.find("div/span")
+    # if len(posters)> 2:
+    #    poster = posters[1].text if posters[1].text else posters[2].text or ""
+    # else:
+    #   poster = ""
+    return {
+        "detail_url": url,
+        "offer_id": offer_id,
+        # 'poster': poster,
+        "image": image,
+        "price": price,
+        "price_int": round(price),
+        "size": size,
+        "rooms": rooms,
+        "price_per_m2": per_m2,
+        "calculated_per_m2": price / size if size else -1,
+    }
 
 
 @caching(key_func=key_sha1)
@@ -30,9 +153,9 @@ def get_offer_phone_numbers(offer_id, cookie, csrf_token):
     url = "https://www.otodom.pl/ajax/misc/contact/phone/{0}/".format(offer_id)
     payload = "CSRFToken={0}".format(csrf_token)
     headers = {
-        'cookie': "{0}".format(cookie),
-        'content-type': "application/x-www-form-urlencoded",
-        'User-Agent': get_random_user_agent()
+        "cookie": "{0}".format(cookie),
+        "content-type": "application/x-www-form-urlencoded",
+        "User-Agent": get_random_user_agent(),
     }
 
     response = requests.request("POST", url, data=payload, headers=headers)
@@ -49,7 +172,7 @@ def get_offer_facebook_description(html_parser):
     :rtype: string
     :return: The default facebook share message
     """
-    fb_description = html_parser.find(attrs={'name': 'description'}).attrs['content']
+    fb_description = html_parser.find(attrs={"name": "description"}).attrs["content"]
     return fb_description
 
 
@@ -61,8 +184,11 @@ def get_offer_ninja_pv(html_content):
     :rtype: dict
     :return: ninjaPV data
     """
-    found = re.search(r".*window\.ninjaPV\s=\s(?P<json_info>{.*?})", html_content.decode('unicode-escape'))
-    ninja_pv = found.groupdict().get('json_info')
+    found = re.search(
+        r".*window\.ninjaPV\s=\s(?P<json_info>{.*?})",
+        html_content.decode("unicode-escape"),
+    )
+    ninja_pv = found.groupdict().get("json_info")
     return json.loads(ninja_pv)
 
 
@@ -76,12 +202,12 @@ def get_offer_floor(html_parser):
     """
     floor_number_raw_data = html_parser.find(class_="param_floor_no")
     floor = ""
-    if hasattr(floor_number_raw_data, 'strong'):
+    if hasattr(floor_number_raw_data, "strong"):
         floor = floor_number_raw_data.strong.text
-    return '0' if floor == "parter" else floor
+    return "0" if floor == "parter" else floor
 
 
-def get_offer_total_floors(html_parser, default_value=''):
+def get_offer_total_floors(html_parser, default_value=""):
     """
     This method returns the maximal number of floors in the building.
 
@@ -91,7 +217,7 @@ def get_offer_total_floors(html_parser, default_value=''):
     """
     # searching dom for floor data
     floor_raw_data = html_parser.find(class_="param_floor_no")
-    if hasattr(floor_raw_data, 'span'):
+    if hasattr(floor_raw_data, "span"):
         floor_data = floor_raw_data.span.text
     else:
         return default_value
@@ -114,18 +240,18 @@ def get_month_num_for_string(value):
     """
     value = value.lower()[:3]
     return {
-        'sty': 1,
-        'lut': 2,
-        'mar': 3,
-        'kwi': 4,
-        'maj': 5,
-        'cze': 6,
-        'lip': 7,
-        'sie': 8,
-        'wrz': 9,
-        'paź': 10,
-        'lis': 11,
-        'gru': 12,
+        "sty": 1,
+        "lut": 2,
+        "mar": 3,
+        "kwi": 4,
+        "maj": 5,
+        "cze": 6,
+        "lip": 7,
+        "sie": 8,
+        "wrz": 9,
+        "paź": 10,
+        "lis": 11,
+        "gru": 12,
     }.get(value)
 
 
@@ -138,7 +264,7 @@ def parse_available_from(date):
     :return: Unix timestamp
     :rtype: int
     """
-    date_parts = date.split(' ')
+    date_parts = date.split(" ")
     month = get_month_num_for_string(date_parts[1].lower())
     year = int(date_parts[2])
     day = int(date_parts[0])
@@ -155,13 +281,16 @@ def get_offer_apartment_details(html_parser):
     :return: A list containing dictionaries of details, for example {'kaucja': 1100 zł}
     """
     found = html_parser.find(class_="sub-list")
-    apartment_details = ''
+    apartment_details = ""
     if found:
         apartment_details = found.text
-    details = [{d.split(": ")[0]: d.split(": ")[1]}
-               for d in str(apartment_details).split("\n") if d]
+    details = [
+        {d.split(": ")[0]: d.split(": ")[1]}
+        for d in str(apartment_details).split("\n")
+        if d
+    ]
     for i, detail in enumerate(details):
-        available_from = detail.get('Dostępne od')
+        available_from = detail.get("Dostępne od")
         if available_from:
             details[i] = {list(detail.keys())[0]: parse_available_from(available_from)}
     return details
@@ -181,7 +310,7 @@ def get_offer_additional_assets(html_parser):
         assets = [
             asset.strip()
             for group in additional_group_assets
-            for asset in group.text.split('\n')
+            for asset in group.text.split("\n")
             if asset
         ]
     return assets
@@ -195,10 +324,12 @@ def get_offer_description(html_parser):
     :rtype: string
     :return: The apartment description
     """
-    element = html_parser.find(itemprop="description") or html_parser.find(class_="offer-description")
+    element = html_parser.find(itemprop="description") or html_parser.find(
+        class_="offer-description"
+    )
     if not element:
         return
-    description = element.text.replace(u'\xa0', u' ').replace('\n', ' ')
+    description = element.text.replace("\xa0", " ").replace("\n", " ")
     return description
 
 
@@ -210,7 +341,9 @@ def get_offer_poster_name(html_parser):
     :rtype: string
     :return: The poster's name
     """
-    element = html_parser.find(class_="box-person-name") or html_parser.find(class_="seller-box__seller-name")
+    element = html_parser.find(class_="box-person-name") or html_parser.find(
+        class_="seller-box__seller-name"
+    )
     if not element:
         return
     name = element.text.strip()
@@ -252,10 +385,14 @@ def get_offer_3d_walkaround_link(html_parser):
     :rtype: string
     :return: A 3D walkaround view of the apartment
     """
-    walkaround_raw_data = walkaround = html_parser.find("strong", string="wirtualny spacer:")
+    walkaround_raw_data = walkaround = html_parser.find(
+        "strong", string="wirtualny spacer:"
+    )
     walkaround = ""
     if hasattr(walkaround_raw_data, "strong"):
-        walkaround = html_parser.find("strong", string="wirtualny spacer:").next_sibling.next_sibling.attrs["href"]
+        walkaround = html_parser.find(
+            "strong", string="wirtualny spacer:"
+        ).next_sibling.next_sibling.attrs["href"]
     return walkaround
 
 
@@ -284,9 +421,9 @@ def parse_date_to_timestamp(date):
     :return: Unix timestamp
     :rtype: int
     """
-    if 'ponad' in date:
+    if "ponad" in date:
         date = (dt.datetime.now() - dt.timedelta(days=15)).date().strftime("%d.%m.%Y")
-    date_parts = date.split('.')
+    date_parts = date.split(".")
     month = int(date_parts[1])
     year = int(date_parts[2])
     day = int(date_parts[0])
@@ -305,10 +442,23 @@ def get_offer_details(html_parser):
     # [{d.split(': ')[0].strip(): d.split(': ')[1].strip()} for d in f.split("\n") if not re.match(r'^\s*$', d)]
     try:
         f = html_parser.find(class_="text-details").text
-        temp = [d for d in f.split("\n") if not re.match(r'^\s*$', d)]
-        output = [{d.split(': ')[0].strip(): d.split(': ')[1].strip()} for d in temp if "Data" not in d]
-        output.extend([{d.split(': ')[0].strip(): parse_date_to_timestamp(d.split(': ')[1].strip())} for d in temp
-                       if "Data" in d])
+        temp = [d for d in f.split("\n") if not re.match(r"^\s*$", d)]
+        output = [
+            {d.split(": ")[0].strip(): d.split(": ")[1].strip()}
+            for d in temp
+            if "Data" not in d
+        ]
+        output.extend(
+            [
+                {
+                    d.split(": ")[0].strip(): parse_date_to_timestamp(
+                        d.split(": ")[1].strip()
+                    )
+                }
+                for d in temp
+                if "Data" in d
+            ]
+        )
         return output
     except AttributeError:
         return {}
@@ -348,20 +498,20 @@ def build_offer_additonal_assets(additional_assets, apartment_details):
         return {}
 
     return {
-        'heating': details.get('ogrzewanie'),
-        'balcony': 'balkon' in additional_assets,
-        'kitchen': 'oddzielna kuchnia' in additional_assets,
-        'terrace': 'taras' in additional_assets,
-        'internet': 'internet' in additional_assets,
-        'elevator': 'winda' in additional_assets,
-        'car_parking': 'garaż/miejsce parkingowe' in additional_assets,
-        'disabled_facilities': None,
-        'mezzanine': None,
-        'basement': 'winda' in additional_assets,
-        'duplex_apartment': 'dwupoziomowe' in additional_assets,
-        'garden': 'ogródek' in additional_assets,
-        'garage': 'garaż' in 'garaż/miejsce parkingowe' in additional_assets,
-        'cable_tv': 'telewizja kablowa' in details
+        "heating": details.get("ogrzewanie"),
+        "balcony": "balkon" in additional_assets,
+        "kitchen": "oddzielna kuchnia" in additional_assets,
+        "terrace": "taras" in additional_assets,
+        "internet": "internet" in additional_assets,
+        "elevator": "winda" in additional_assets,
+        "car_parking": "garaż/miejsce parkingowe" in additional_assets,
+        "disabled_facilities": None,
+        "mezzanine": None,
+        "basement": "winda" in additional_assets,
+        "duplex_apartment": "dwupoziomowe" in additional_assets,
+        "garden": "ogródek" in additional_assets,
+        "garage": "garaż" in "garaż/miejsce parkingowe" in additional_assets,
+        "cable_tv": "telewizja kablowa" in details,
     }
 
 
@@ -369,13 +519,15 @@ def get_flat_data(html_parser, ninja_pv):
     apartment_details = get_offer_apartment_details(html_parser)
 
     return {
-        '3D_walkaround_link': get_offer_3d_walkaround_link(html_parser),
-        'apartment_details': apartment_details,
-        'additional_assets': build_offer_additonal_assets(get_offer_additional_assets(html_parser), apartment_details),
-        'surface': _float(ninja_pv.get("surface", '')),
-        'rooms': _int(ninja_pv.get("rooms", '')),
-        'floor': _int(get_offer_floor(html_parser)),
-        'total_floors': _int(get_offer_total_floors(html_parser)),
+        "3D_walkaround_link": get_offer_3d_walkaround_link(html_parser),
+        "apartment_details": apartment_details,
+        "additional_assets": build_offer_additonal_assets(
+            get_offer_additional_assets(html_parser), apartment_details
+        ),
+        "surface": _float(ninja_pv.get("surface", "")),
+        "rooms": _int(ninja_pv.get("rooms", "")),
+        "floor": _int(get_offer_floor(html_parser)),
+        "total_floors": _int(get_offer_total_floors(html_parser)),
     }
 
 
@@ -399,10 +551,10 @@ def get_offer_information(url, context=None):
         cookie = get_cookie_from(response)
         try:
             csrf_token = get_csrf_token(content)
-            offer_id = context['offer_id']
+            offer_id = context["offer_id"]
         except AttributeError:
-            csrf_token = ''
-            offer_id = ''
+            csrf_token = ""
+            offer_id = ""
 
         # getting offer details
         try:
@@ -411,8 +563,14 @@ def get_offer_information(url, context=None):
             # offer was not present any more
             phone_numbers = []
 
-        phone_number_replace_dict = {u'\xa0': "", " ": "", "-": "", "+48": ""}
-        phone_numbers = sum([replace_all(num, phone_number_replace_dict).split(".") for num in phone_numbers], [])
+        phone_number_replace_dict = {"\xa0": "", " ": "", "-": "", "+48": ""}
+        phone_numbers = sum(
+            [
+                replace_all(num, phone_number_replace_dict).split(".")
+                for num in phone_numbers
+            ],
+            [],
+        )
     else:
         cookie = ""
         csrf_token = ""
@@ -421,27 +579,23 @@ def get_offer_information(url, context=None):
 
     ninja_pv = get_offer_ninja_pv(content)
     result = {
-        'title': get_offer_title(html_parser),
-        'address': get_offer_address(html_parser),
-        'poster_name': get_offer_poster_name(html_parser),
-        'poster_type': ninja_pv.get("poster_type"),
-        'price': ninja_pv.get("ad_price"),
-        'currency': ninja_pv.get("price_currency"),
-        'city': ninja_pv.get("city_name"),
-        'district': ninja_pv.get("district_name", ""),
-        'voivodeship': ninja_pv.get("region_name"),
-        'geographical_coordinates': get_offer_geographical_coordinates(html_parser),
-        'phone_numbers': phone_numbers,
-        'description': get_offer_description(html_parser),
-        'offer_details': get_offer_details(html_parser),
-        'photo_links': get_offer_photos_links(html_parser),
-        'video_link': get_offer_video_link(html_parser),
-        'facebook_description': get_offer_facebook_description(html_parser),
-        'meta': {
-            'cookie': cookie,
-            'csrf_token': csrf_token,
-            'context': context
-        }
+        "title": get_offer_title(html_parser),
+        "address": get_offer_address(html_parser),
+        "poster_name": get_offer_poster_name(html_parser),
+        "poster_type": ninja_pv.get("poster_type"),
+        "price": ninja_pv.get("ad_price"),
+        "currency": ninja_pv.get("price_currency"),
+        "city": ninja_pv.get("city_name"),
+        "district": ninja_pv.get("district_name", ""),
+        "voivodeship": ninja_pv.get("region_name"),
+        "geographical_coordinates": get_offer_geographical_coordinates(html_parser),
+        "phone_numbers": phone_numbers,
+        "description": get_offer_description(html_parser),
+        "offer_details": get_offer_details(html_parser),
+        "photo_links": get_offer_photos_links(html_parser),
+        "video_link": get_offer_video_link(html_parser),
+        "facebook_description": get_offer_facebook_description(html_parser),
+        "meta": {"cookie": cookie, "csrf_token": csrf_token, "context": context},
     }
 
     flat_data = get_flat_data(html_parser, ninja_pv)

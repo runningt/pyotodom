@@ -6,10 +6,13 @@ import sys
 
 from bs4 import BeautifulSoup
 
-from otodom import BASE_URL
+from otodom.offer import parse_category_offer, parse_json_offer
 from otodom.utils import (
-    get_json_url, get_number_from_string, get_number_of_offers, get_region_from_autosuggest, get_response_for_url,
-    get_url, price_to_float
+    get_json_url,
+    get_number_of_offers,
+    get_region_from_autosuggest,
+    get_response_for_url,
+    get_url,
 )
 
 if sys.version_info < (3, 3):
@@ -19,62 +22,6 @@ else:
 
 
 log = logging.getLogger(__file__)
-
-
-def parse_category_offer(offer_markup):
-    """
-    A method for getting the most important data out of an offer markup.
-
-    :param offer_markup: a requests.response.content object
-    :rtype: dict(string, string)
-    :return: see the return section of :meth:`scrape.category.get_category` for more information
-    """
-    html_parser = BeautifulSoup(offer_markup, "html.parser")
-    link = html_parser.find("a")
-    url = link.attrs["href"]
-    if not url:
-        # detail url is not present
-        return {}
-    offer_id = url.split("-")[-1]
-    url = BASE_URL + url
-    image = html_parser.find("img")
-    image = image.get("src", "").split(";")[0] or image.text if image else ""
-    article = html_parser.find("article")
-    title = article.find("h3", {"data-cy": "listing-item-title"})
-    title = title.text.strip() if title else ""
-    data = article.findAll("p")
-    price = price_to_float(data[1].text)
-    size = ""
-    rooms = ""
-    per_m2 = ""
-    try:
-        details = data[2]
-        details = details.findAll("span")
-        if len(details) > 2:
-            rooms = "".join(filter(str.isdigit, details[0].text))
-            size = price_to_float(details[1].text)
-            per_m2 = price_to_float(details[2].text)
-    except IndexError:
-        pass
-
-    # TODO: add poster
-    # posters = article.find("div/span")
-    # if len(posters)> 2:
-    #    poster = posters[1].text if posters[1].text else posters[2].text or ""
-    # else:
-    #   poster = ""
-    return {
-        "detail_url": url,
-        "offer_id": offer_id,
-        # 'poster': poster,
-        "image": image,
-        "price": price,
-        "price_int": round(price),
-        "size": size,
-        "rooms": rooms,
-        "price_per_m2": per_m2,
-        "calculated_per_m2": price / size if size else 0.0,
-    }
 
 
 def parse_category_content(markup, get_promoted=False):
@@ -299,17 +246,23 @@ def get_category_json(
             page,
             **filters
         )
-        json = get_response_for_url(url).json
-        parsed_page = json["data"]
+        json_res = get_response_for_url(url).json()
+        offers_json = (
+            json_res.get("pageProps", {})
+            .get("data", {})
+            .get("searchAds", {})
+            .get("items", {})
+        )
         """
-        TODO: check for json
+        TODO: check for json verion
         if not was_category_search_successful(content):
             log.warning("Search for category wasn't successful", url)
             return []
         """
+        parsed_offers = map(parse_json_offer, offers_json)
 
-        offers_parsed = len(parsed_page)
-        parsed_content.extend(parsed_page)
+        offers_parsed = len(offers_json)
+        parsed_content.extend(parsed_offers)
         offers += offers_parsed
         page += 1
     return parsed_content
