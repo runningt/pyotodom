@@ -14,12 +14,7 @@ except ImportError:
     unicode = lambda x, *args: x
 
 from bs4 import BeautifulSoup
-from scrapper_helpers.utils import (
-    caching,
-    get_random_user_agent,
-    key_sha1,
-    normalize_text,
-)
+from scrapper_helpers.utils import caching, get_random_user_agent, key_sha1, normalize_text
 
 from otodom import BASE_URL
 
@@ -109,7 +104,7 @@ def price_to_float(price: str) -> float:
     filtered = "".join(
         d for d in price if d.isdigit() and d.isascii() or d in [",", "."]
     )
-    return _float(filtered, default=0.0)
+    return _float(filtered, default=-1.0)
 
 
 def get_url(
@@ -160,16 +155,19 @@ def get_url(
 
 
 @caching(key_func=key_sha1)
-def _get_json_identifier(main_category, detail_category, region_data, **filters):
+def _get_json_identifier(main_category, detail_category, region_data):
     """
     get identifier from buildMaifest
     """
-    short_url = get_url(main_category, detail_category, region_data, 1, 1, **filters)
+    short_url = get_url(main_category, detail_category, region_data, 1, 1, **{})
     content = BeautifulSoup(get_response_for_url(short_url).content, "html.parser")
     try:
         script = content.find("script", {"src": re.compile(r"buildManifest\.js")})
         return script.attrs["src"].split("/")[-2]
-    except (IndexError, TypeError):
+    except (
+        IndexError,
+        TypeError,
+    ):
         return None
 
 
@@ -179,9 +177,7 @@ def get_json_url(
     """
     Get url of json file with otodom search data
     """
-    identifier = _get_json_identifier(
-        main_category, detail_category, region_data, **filters
-    )
+    identifier = _get_json_identifier(main_category, detail_category, region_data)
     if not identifier:
         return None
     url = "/".join(

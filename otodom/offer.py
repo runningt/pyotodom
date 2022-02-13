@@ -8,23 +8,10 @@ import re
 
 import requests
 from bs4 import BeautifulSoup
-from scrapper_helpers.utils import (
-    _float,
-    _int,
-    caching,
-    get_random_user_agent,
-    key_sha1,
-    replace_all,
-)
+from scrapper_helpers.utils import _float, _int, caching, get_random_user_agent, key_sha1, replace_all
 
 from otodom import BASE_URL
-from otodom.utils import (
-    _rooms_translate,
-    get_cookie_from,
-    get_csrf_token,
-    get_response_for_url,
-    price_to_float,
-)
+from otodom.utils import _rooms_translate, get_cookie_from, get_csrf_token, get_response_for_url, price_to_float
 
 log = logging.getLogger(__file__)
 
@@ -42,20 +29,25 @@ def parse_json_offer(offer):
     try:
         # TODO: calculate to PLN if different currency
         if offer["totalPrice"]["currency"] != "PLN":
-            price = -1
+            price = -1.0
         else:
             price = offer["totalPrice"]["value"]
-    except (IndexError, AttributeError):
-        price = -1
+            if isinstance(price, str):
+                price = price_to_float(price)
+
+    except (IndexError, AttributeError, TypeError):
+        price = -1.0
 
     try:
         # TODO: calculate to PLN if different currency
         if offer["pricePerSquareMeter"]["currency"] != "PLN":
-            price_per_m2 = -1
+            price_per_m2 = -1.0
         else:
             price_per_m2 = offer["pricePerSquareMeter"]["value"]
-    except (IndexError, AttributeError):
-        price_per_m2 = -1
+            if isinstance(price_per_m2, str):
+                price_per_m2 = price_to_float(price_per_m2)
+    except (IndexError, AttributeError, TypeError):
+        price_per_m2 = -1.0
 
     try:
         rooms = _rooms_translate.get(offer["roomsNumber"], 0)
@@ -75,7 +67,7 @@ def parse_json_offer(offer):
         "rooms": rooms,
         "rooms_label": offer.get("roomsNumber", ""),
         "price_per_m2": price_per_m2,
-        "calculated_per_m2": price / size if size else -1,
+        "calculated_per_m2": price / size if size else -1.0,
         "offer_info": offer,
     }
 
@@ -89,6 +81,8 @@ def parse_category_offer(offer_markup):
     :param offer_markup: a requests.response.content object
     :rtype: dict(string, string)
     :return: see the return section of :meth:`scrape.category.get_category` for more information
+
+    TODO: "Adjust to new otodom version"
     """
     html_parser = BeautifulSoup(offer_markup, "html.parser")
     link = html_parser.find("a")
